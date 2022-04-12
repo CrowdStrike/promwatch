@@ -93,6 +93,12 @@ var collectorTypes = map[string]*CollectorType{
 		Dimension:      "DBInstanceIdentifier",
 		ResourcePrefix: "db:",
 	},
+	"neptune": {
+		ResourceName:   "rds:db",
+		Namespace:      "AWS/Neptune",
+		Dimension:      "DBInstanceIdentifier",
+		ResourcePrefix: "db:",
+	},
 }
 
 func CollectorFromConfig(c CollectorConfig) (MetricCollector, error) {
