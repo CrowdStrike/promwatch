@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -100,7 +101,16 @@ func main() {
 		}).ServeHTTP(w, r)
 	})
 
-	dieOnError(http.ListenAndServe(conf.Listen, handlers.CompressHandler(mux)))
+	s := &http.Server{
+		Addr:              conf.Listen,
+		Handler:           handlers.CompressHandler(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       2 * time.Second,
+		WriteTimeout:      2 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+
+	dieOnError(s.ListenAndServe())
 }
 
 func dieOnError(err error) {
