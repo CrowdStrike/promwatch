@@ -2,7 +2,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v2"
@@ -106,7 +106,7 @@ func (c *PromWatchConfig) UnmarshalYAML(unmarshal func(interface{}) error) error
 
 func loadConfig(config string) (*PromWatchConfig, error) {
 	parsed := PromWatchConfig{}
-	content, err := ioutil.ReadFile(config)
+	content, err := os.ReadFile(config)
 	if err != nil {
 		return &parsed, nil
 	}
