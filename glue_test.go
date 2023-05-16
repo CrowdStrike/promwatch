@@ -116,6 +116,36 @@ func TestConvertTags(t *testing.T) {
 				Tags: []*tagging.Tag{
 					{
 						Key:   aws.String("someTagKey"),
+						Value: aws.String(`"someTag\"Value"`),
+					},
+				},
+			},
+			mergeTags: []string{
+				"someTagKey",
+			},
+			expected: `some_tag_key="\"someTag\\\"Value\""`,
+			message:  "Tag values should be escaped",
+		},
+		{
+			resource: &tagging.ResourceTagMapping{
+				Tags: []*tagging.Tag{
+					{
+						Key:   aws.String("someTagKey"),
+						Value: aws.String(`“insane"`),
+					},
+				},
+			},
+			mergeTags: []string{
+				"someTagKey",
+			},
+			expected: `some_tag_key="“insane\""`,
+			message:  "Tag values should be escaped",
+		},
+		{
+			resource: &tagging.ResourceTagMapping{
+				Tags: []*tagging.Tag{
+					{
+						Key:   aws.String("someTagKey"),
 						Value: aws.String("someTagValue"),
 					},
 					{

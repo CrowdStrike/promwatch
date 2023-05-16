@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+
 	// sha1 is good enough for this use case, disabling linter
 	"crypto/sha1" // nolint:gosec
 	"errors"
@@ -48,8 +49,8 @@ type CollectorType struct {
 	ResourcePrefix string
 }
 
-//  collectorTypes is a map of collector types for resources that are supported
-//  by the AWS ResourceGroupsTaggingAPI.
+// collectorTypes is a map of collector types for resources that are supported
+// by the AWS ResourceGroupsTaggingAPI.
 var collectorTypes = map[string]*CollectorType{
 	"alb": {
 		ResourceName:   "elasticloadbalancing:loadbalancer/app",
@@ -231,6 +232,16 @@ func sanitize(str string) string {
 	return replacer.Replace(str)
 }
 
+// escapeValue escapes double quotes in label values to avoid syntax errors
+// stringifying the metrics keys and values later on.
+func escapeValue(str string) string {
+	replacer := strings.NewReplacer(
+		`"`, `\"`,
+		`\`, `\\`,
+	)
+	return replacer.Replace(str)
+}
+
 // ResourceIndex holds resources, queries, and results throughout the lifetime
 // of CloudWatch metrics query done by PromWatch. Using this index allows fast
 // access to queries, results, and resources correlated by the same IDs (used as
@@ -282,7 +293,7 @@ func tagsToString(tags []*t.Tag) string {
 			sep = ""
 		}
 
-		fmt.Fprintf(&buf, `%s="%s"%s`, toSnakeCase(sanitize(*t.Key)), *t.Value, sep)
+		fmt.Fprintf(&buf, `%s="%s"%s`, toSnakeCase(sanitize(*t.Key)), escapeValue(*t.Value), sep)
 	}
 
 	return buf.String()
