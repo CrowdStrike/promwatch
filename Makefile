@@ -1,4 +1,4 @@
-VERSION = 0.7.3
+VERSION = 0.8.0
 GIT_HASH = $(shell git rev-parse --short HEAD)
 DATE = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS = -X main.Version=$(VERSION) \

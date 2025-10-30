@@ -70,6 +70,12 @@ var collectorTypes = map[string]*CollectorType{
 		Dimension:      "CacheClusterId",
 		ResourcePrefix: "cluster:",
 	},
+	"ec_serverless": {
+		ResourceName:   "elasticache:serverlesscache",
+		Namespace:      "AWS/ElastiCache",
+		Dimension:      "clusterId",
+		ResourcePrefix: "serverlesscache:",
+	},
 	"elb": {
 		ResourceName:   "elasticloadbalancing:loadbalancer",
 		Namespace:      "AWS/ELB",

@@ -43,6 +43,7 @@ Currently implemented collector types are:
 - ebs
 - ec
 - ec_host (Elasticache Host-level)
+- ec_serverless (Elasticache Serverless)
 - elb
 - neptune
 - nlb
