@@ -108,7 +108,7 @@ func loadConfig(config string) (*PromWatchConfig, error) {
 	parsed := PromWatchConfig{}
 	content, err := os.ReadFile(config)
 	if err != nil {
-		return &parsed, nil
+		return &parsed, err
 	}
 
 	err = yaml.Unmarshal(content, &parsed)
