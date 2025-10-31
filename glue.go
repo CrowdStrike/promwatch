@@ -102,6 +102,12 @@ var collectorTypes = map[string]*CollectorType{
 		Dimension:      "DBInstanceIdentifier",
 		ResourcePrefix: "db:",
 	},
+	"emr": {
+		ResourceName:   "elasticmapreduce:cluster",
+		Namespace:      "AWS/ElasticMapReduce",
+		Dimension:      "JobFlowId",
+		ResourcePrefix: "cluster/",
+	},
 }
 
 func CollectorFromConfig(c CollectorConfig) (MetricCollector, error) {

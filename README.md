@@ -45,6 +45,7 @@ Currently implemented collector types are:
 - ec_host (Elasticache Host-level)
 - ec_serverless (Elasticache Serverless)
 - elb
+- emr
 - neptune
 - nlb
 - rds
@@ -152,6 +153,7 @@ granted the `tag:GetResources` permission. Those services are:
 - ebs
 - ec
 - elb
+- emr
 - neptune
 - nlb
 - rds
