@@ -4,16 +4,17 @@ package main
 import (
 	"context"
 	"sync"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/client"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	autoscalingTypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	ecTypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
+	tagging "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 )
 
 const MaxMetricDataQueryItems = 500
@@ -23,10 +24,10 @@ const MaxMetricDataQueryItems = 500
 // service packages, this interface helps us to easily keep track of that usage
 // and implement testing clients.
 type Client interface {
-	DescribeAutoScalingGroups(*autoscaling.DescribeAutoScalingGroupsInput, *CollectorTelemetry) (*[]*autoscaling.Group, error)
-	DescribeCacheClusters(*elasticache.DescribeCacheClustersInput, *CollectorTelemetry) (*[]*elasticache.CacheCluster, error)
-	GetResources(*tagging.GetResourcesInput, *CollectorTelemetry) (*[]*tagging.ResourceTagMapping, error)
-	GetMetricData([]*cloudwatch.GetMetricDataInput, *CollectorTelemetry) (*[]*cloudwatch.MetricDataResult, error)
+	DescribeAutoScalingGroups(context.Context, *autoscaling.DescribeAutoScalingGroupsInput, *CollectorTelemetry) (*[]autoscalingTypes.AutoScalingGroup, error)
+	DescribeCacheClusters(context.Context, *elasticache.DescribeCacheClustersInput, *CollectorTelemetry) (*[]ecTypes.CacheCluster, error)
+	GetResources(context.Context, *tagging.GetResourcesInput, *CollectorTelemetry) (*[]taggingTypes.ResourceTagMapping, error)
+	GetMetricData(context.Context, []*cloudwatch.GetMetricDataInput, *CollectorTelemetry) (*[]cwTypes.MetricDataResult, error)
 }
 
 // AWSClient implements the Client interface and provides the AWS requests we
@@ -34,122 +35,115 @@ type Client interface {
 type AWSClient struct {
 	Region      string
 	MaxRetries  int
-	sess        *session.Session
-	tagging     *tagging.ResourceGroupsTaggingAPI
-	cloudwatch  *cloudwatch.CloudWatch
-	autoscaling *autoscaling.AutoScaling
-	elasticache *elasticache.ElastiCache
+	cfg         aws.Config
+	tagging     *tagging.Client
+	cloudwatch  *cloudwatch.Client
+	autoscaling *autoscaling.Client
+	elasticache *elasticache.Client
 }
 
-func defaultSession(region string) (*session.Session, error) {
-	retryer := client.DefaultRetryer{
-		NumMaxRetries:    5,
-		MinThrottleDelay: 500 * time.Millisecond,
-		MaxThrottleDelay: 3 * time.Second,
-		MinRetryDelay:    10 * time.Millisecond,
-		MaxRetryDelay:    3 * time.Second,
-	}
-	// level := aws.LogDebugWithHTTPBody
-	return session.NewSession(&aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(5),
-		Retryer:    retryer,
-		// LogLevel:   &level,
-	})
+func defaultConfig(region string) (aws.Config, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(region),
+		config.WithRetryMaxAttempts(5),
+		config.WithRetryMode(aws.RetryModeStandard),
+	)
+	return cfg, err
 }
 
 // DefaultAWSClient returns a default AWSClient for the provided region with max
 // retries set to 5 and all other values being set as in a stock aws.Config.
 func DefaultAWSClient(region string) (Client, error) {
-	sess, err := defaultSession(region)
+	cfg, err := defaultConfig(region)
 	if err != nil {
 		return nil, err
 	}
 
 	return &AWSClient{
-		Region: *sess.Config.Region,
-		sess:   sess,
+		Region: region,
+		cfg:    cfg,
 	}, nil
 }
 
-func (client *AWSClient) getTaggingAPI() *tagging.ResourceGroupsTaggingAPI {
+func (client *AWSClient) getTaggingAPI() *tagging.Client {
 	if client.tagging != nil {
 		return client.tagging
 	}
 
-	client.tagging = tagging.New(client.sess)
+	client.tagging = tagging.NewFromConfig(client.cfg)
 
 	return client.tagging
 }
 
-func (client *AWSClient) getCloudwatch() *cloudwatch.CloudWatch {
+func (client *AWSClient) getCloudwatch() *cloudwatch.Client {
 	if client.cloudwatch != nil {
 		return client.cloudwatch
 	}
 
-	client.cloudwatch = cloudwatch.New(client.sess)
+	client.cloudwatch = cloudwatch.NewFromConfig(client.cfg)
 
 	return client.cloudwatch
 }
 
-func (client *AWSClient) getAutoscaling() *autoscaling.AutoScaling {
-	client.autoscaling = autoscaling.New(client.sess)
+func (client *AWSClient) getAutoscaling() *autoscaling.Client {
+	client.autoscaling = autoscaling.NewFromConfig(client.cfg)
 
 	return client.autoscaling
 }
 
-func (client *AWSClient) getElasticache() *elasticache.ElastiCache {
-	client.elasticache = elasticache.New(client.sess)
+func (client *AWSClient) getElasticache() *elasticache.Client {
+	client.elasticache = elasticache.NewFromConfig(client.cfg)
 
 	return client.elasticache
 }
 
 // GetResources proxies to
-// resourcegroupstaggingapi.GetGetResourcesPagesWithContext and handles
+// resourcegroupstaggingapi GetResources paginator and handles
 // aggregation of the paged results.
-func (client *AWSClient) GetResources(input *tagging.GetResourcesInput, tele *CollectorTelemetry) (*[]*tagging.ResourceTagMapping, error) {
-	res := []*tagging.ResourceTagMapping{}
-	ctx := context.Background()
+func (client *AWSClient) GetResources(ctx context.Context, input *tagging.GetResourcesInput, tele *CollectorTelemetry) (*[]taggingTypes.ResourceTagMapping, error) {
+	res := []taggingTypes.ResourceTagMapping{}
 	api := client.getTaggingAPI()
 
-	err := api.GetResourcesPagesWithContext(ctx, input, callback(&res, tele.GetResourcesCount))
-	return &res, err
-}
-
-func callback(res *[]*tagging.ResourceTagMapping, counter prometheus.Counter) func(page *tagging.GetResourcesOutput, lastPage bool) bool {
-	return func(page *tagging.GetResourcesOutput, lastPage bool) bool {
-		defer counter.Inc()
-		*res = append(*res, page.ResourceTagMappingList...)
-		return page.PaginationToken != nil
+	paginator := tagging.NewGetResourcesPaginator(api, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return &res, err
+		}
+		tele.GetResourcesCount.Inc()
+		res = append(res, page.ResourceTagMappingList...)
 	}
+	return &res, nil
 }
 
-// GetResources proxies to cloudwatch.GetMetricDataPage and handles aggregation
+// GetMetricData proxies to cloudwatch.GetMetricData paginator and handles aggregation
 // of the paged results. The requests are issued concurrently.
-func (client *AWSClient) GetMetricData(in []*cloudwatch.GetMetricDataInput, tele *CollectorTelemetry) (*[]*cloudwatch.MetricDataResult, error) {
+func (client *AWSClient) GetMetricData(ctx context.Context, in []*cloudwatch.GetMetricDataInput, tele *CollectorTelemetry) (*[]cwTypes.MetricDataResult, error) {
 	type lock struct {
 		sync.Mutex
-		r []*cloudwatch.MetricDataResult
+		r []cwTypes.MetricDataResult
 	}
 	res := lock{
-		r: []*cloudwatch.MetricDataResult{},
+		r: []cwTypes.MetricDataResult{},
 	}
 	wg := sync.WaitGroup{}
 	for _, input := range in {
 		wg.Add(1)
 		go func(ip *cloudwatch.GetMetricDataInput) {
 			defer wg.Done()
-			err := client.getCloudwatch().GetMetricDataPages(ip, func(page *cloudwatch.GetMetricDataOutput, last bool) bool {
-				defer tele.GetMetricDataCount.Inc()
+			api := client.getCloudwatch()
+			paginator := cloudwatch.NewGetMetricDataPaginator(api, ip)
+			for paginator.HasMorePages() {
+				page, err := paginator.NextPage(ctx)
+				if err != nil {
+					Logger.Error("GetMetricData:", err.Error())
+					tele.ErrorCount.Inc()
+					return
+				}
+				tele.GetMetricDataCount.Inc()
 				res.Lock()
 				res.r = append(res.r, page.MetricDataResults...)
 				res.Unlock()
-				return !last
-			})
-
-			if err != nil {
-				Logger.Error("GetMetricData:", err.Error())
-				tele.ErrorCount.Inc()
 			}
 		}(input)
 	}
@@ -158,52 +152,40 @@ func (client *AWSClient) GetMetricData(in []*cloudwatch.GetMetricDataInput, tele
 	return &res.r, nil
 }
 
-func (client *AWSClient) DescribeAutoScalingGroups(input *autoscaling.DescribeAutoScalingGroupsInput, tele *CollectorTelemetry) (*[]*autoscaling.Group, error) {
-	type lock struct {
-		sync.Mutex
-		r []*autoscaling.Group
-	}
-	res := lock{
-		r: []*autoscaling.Group{},
-	}
+func (client *AWSClient) DescribeAutoScalingGroups(ctx context.Context, input *autoscaling.DescribeAutoScalingGroupsInput, tele *CollectorTelemetry) (*[]autoscalingTypes.AutoScalingGroup, error) {
+	res := []autoscalingTypes.AutoScalingGroup{}
+	api := client.getAutoscaling()
 
-	err := client.getAutoscaling().DescribeAutoScalingGroupsPages(input, func(page *autoscaling.DescribeAutoScalingGroupsOutput, last bool) bool {
+	paginator := autoscaling.NewDescribeAutoScalingGroupsPaginator(api, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			Logger.Error("DescribeAutoScalingGroups:", err.Error())
+			tele.ErrorCount.Inc()
+			return &res, err
+		}
 		tele.DescribeAutoScalingGroupsCount.Inc()
-		res.Lock()
-		res.r = append(res.r, page.AutoScalingGroups...)
-		res.Unlock()
-		return !last
-	})
-
-	if err != nil {
-		Logger.Error("DescribeAutoScalingGroups:", err.Error())
-		tele.ErrorCount.Inc()
+		res = append(res, page.AutoScalingGroups...)
 	}
 
-	return &res.r, err
+	return &res, nil
 }
 
-func (client *AWSClient) DescribeCacheClusters(input *elasticache.DescribeCacheClustersInput, tele *CollectorTelemetry) (*[]*elasticache.CacheCluster, error) {
-	type lock struct {
-		sync.Mutex
-		r []*elasticache.CacheCluster
-	}
-	res := lock{
-		r: []*elasticache.CacheCluster{},
-	}
+func (client *AWSClient) DescribeCacheClusters(ctx context.Context, input *elasticache.DescribeCacheClustersInput, tele *CollectorTelemetry) (*[]ecTypes.CacheCluster, error) {
+	res := []ecTypes.CacheCluster{}
+	api := client.getElasticache()
 
-	err := client.getElasticache().DescribeCacheClustersPages(input, func(page *elasticache.DescribeCacheClustersOutput, last bool) bool {
+	paginator := elasticache.NewDescribeCacheClustersPaginator(api, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			Logger.Error("DescribeElasticacheCacheClusters:", err.Error())
+			tele.ErrorCount.Inc()
+			return &res, err
+		}
 		tele.DescribeElasticacheCacheClustersCount.Inc()
-		res.Lock()
-		res.r = append(res.r, page.CacheClusters...)
-		res.Unlock()
-		return !last
-	})
-
-	if err != nil {
-		Logger.Error("DescribeElasticacheCacheClusters]:", err.Error())
-		tele.ErrorCount.Inc()
+		res = append(res, page.CacheClusters...)
 	}
 
-	return &res.r, err
+	return &res, nil
 }

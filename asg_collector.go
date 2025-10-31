@@ -2,11 +2,14 @@
 package main
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/arn"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	autoscalingTypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 )
 
 type ASGCollector struct {
@@ -34,31 +37,31 @@ func (a *ASGCollector) getGroups() (*ResourceIndex, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := client.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{}, a.base.Telemetry())
+	res, err := client.DescribeAutoScalingGroups(context.TODO(), &autoscaling.DescribeAutoScalingGroupsInput{}, a.base.Telemetry())
 	if err != nil {
 		return nil, err
 	}
 
 	// convert autoscaling groups to resource tag mapping
-	mapping := []*tagging.ResourceTagMapping{}
-	for _, group := range *filter(res, a.base.config.TagFilters) {
-		tags := []*tagging.Tag{}
+	mapping := []taggingTypes.ResourceTagMapping{}
+	for _, group := range filter(res, a.base.config.TagFilters) {
+		tags := []taggingTypes.Tag{}
 		for _, tag := range group.Tags {
-			tags = append(tags, &tagging.Tag{Key: tag.Key, Value: tag.Value})
+			tags = append(tags, taggingTypes.Tag{Key: tag.Key, Value: tag.Value})
 		}
 
-		mapping = append(mapping, &tagging.ResourceTagMapping{
+		mapping = append(mapping, taggingTypes.ResourceTagMapping{
 			ResourceARN: group.AutoScalingGroupARN,
 			Tags:        tags,
 		})
-		Logger.Debugf("ASG ARN: %s", aws.StringValue(group.AutoScalingGroupARN))
+		Logger.Debugf("ASG ARN: %s", aws.ToString(group.AutoScalingGroupARN))
 	}
 
 	return NewResourceIndexFromTagMapping(&mapping, id), nil
 }
 
-func filter(groups *[]*autoscaling.Group, tf []TagFilter) *[]*autoscaling.Group {
-	res := []*autoscaling.Group{}
+func filter(groups *[]autoscalingTypes.AutoScalingGroup, tf []TagFilter) []autoscalingTypes.AutoScalingGroup {
+	res := []autoscalingTypes.AutoScalingGroup{}
 
 outer:
 	for _, g := range *groups {
@@ -91,7 +94,7 @@ outer:
 		}
 	}
 
-	return &res
+	return res
 }
 
 func (a *ASGCollector) Run() *CollectorProc {
@@ -99,15 +102,15 @@ func (a *ASGCollector) Run() *CollectorProc {
 }
 
 // asgMetricDimension sets the name of the autoscaling group as dimension for CloudWatch.
-func asgMetricDimension(resource *tagging.ResourceTagMapping) ([]*cloudwatch.Dimension, error) {
-	arn, err := arn.Parse(*resource.ResourceARN)
+func asgMetricDimension(resource *taggingTypes.ResourceTagMapping) ([]cwTypes.Dimension, error) {
+	parsedArn, err := arn.Parse(*resource.ResourceARN)
 	if err != nil {
-		return []*cloudwatch.Dimension{}, ErrCanNotParseARN
+		return []cwTypes.Dimension{}, ErrCanNotParseARN
 	}
 
 	// Resources e.g.: autoScalingGroup:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:autoScalingGroupName/my-asg-name
 	// to: my-asg-name
-	val := arn.Resource[75:]
+	val := parsedArn.Resource[75:]
 
-	return []*cloudwatch.Dimension{{Name: aws.String("AutoScalingGroupName"), Value: aws.String(val)}}, nil
+	return []cwTypes.Dimension{{Name: aws.String("AutoScalingGroupName"), Value: aws.String(val)}}, nil
 }
