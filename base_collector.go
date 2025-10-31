@@ -160,8 +160,16 @@ func (b *BaseCollector) makeQueries(index *ResourceIndex, namespace string, dime
 						MetricName: aws.String(s.MetricName),
 						Namespace:  aws.String(namespace),
 					},
-					Period: aws.Int32(int32(b.config.Period)), // nolint:gosec // CloudWatch periods are small values
-					Stat:   aws.String(s.Stat),
+					Period: aws.Int32(func() int32 {
+						if b.config.Period < 60 {
+							return 60 // minimum safe value
+						}
+						if b.config.Period > 2147483647 {
+							return 2147483647 // max int32 value
+						}
+						return int32(b.config.Period) // #nosec G115 -- bounds checked above
+					}()),
+					Stat: aws.String(s.Stat),
 				},
 			}
 			dataQuery = append(dataQuery, query)
