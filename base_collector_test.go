@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	tagging "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -68,8 +70,8 @@ func TestGetResourcesInput(t *testing.T) {
 		{
 			collector: &BaseCollector{config: CollectorConfig{}},
 			expected: &tagging.GetResourcesInput{
-				ResourceTypeFilters: []*string{aws.String(testType)},
-				TagFilters:          []*tagging.TagFilter{},
+				ResourceTypeFilters: []string{testType},
+				TagFilters:          []taggingTypes.TagFilter{},
 			},
 			message: "Empty EBS collector config should produce query for all volumes",
 		},
@@ -89,15 +91,15 @@ func TestGetResourcesInput(t *testing.T) {
 				},
 			},
 			expected: &tagging.GetResourcesInput{
-				ResourceTypeFilters: []*string{aws.String(testType)},
-				TagFilters: []*tagging.TagFilter{
+				ResourceTypeFilters: []string{testType},
+				TagFilters: []taggingTypes.TagFilter{
 					{
 						Key:    aws.String("tagKey"),
-						Values: []*string{aws.String("tagValue")},
+						Values: []string{"tagValue"},
 					},
 					{
 						Key:    aws.String("anotherTagKey"),
-						Values: []*string{aws.String("anotherTagValue")},
+						Values: []string{"anotherTagValue"},
 					},
 				},
 			},
@@ -113,26 +115,26 @@ func TestGetResourcesInput(t *testing.T) {
 func TestMakeQueries(t *testing.T) {
 	cases := []struct {
 		collector      *BaseCollector
-		resources      []*tagging.ResourceTagMapping
-		expected       []*cloudwatch.MetricDataQuery
+		resources      []taggingTypes.ResourceTagMapping
+		expected       []cwTypes.MetricDataQuery
 		expectedErrors []error
 		message        string
 	}{
 		{
 			message:   "Empty entities should produce empty results",
 			collector: stripInterface(CollectorFromConfig(CollectorConfig{Type: "ebs"})),
-			resources: []*tagging.ResourceTagMapping{},
-			expected:  []*cloudwatch.MetricDataQuery{},
+			resources: []taggingTypes.ResourceTagMapping{},
+			expected:  []cwTypes.MetricDataQuery{},
 		},
 		{
 			message:   "Invalid ARNs should produce errors",
 			collector: stripInterface(CollectorFromConfig(CollectorConfig{Type: "ebs"})),
-			resources: []*tagging.ResourceTagMapping{
+			resources: []taggingTypes.ResourceTagMapping{
 				{
 					ResourceARN: aws.String("broken"),
 				},
 			},
-			expected: []*cloudwatch.MetricDataQuery{},
+			expected: []cwTypes.MetricDataQuery{},
 			expectedErrors: []error{
 				ErrCanNotParseARN,
 			},
@@ -140,12 +142,12 @@ func TestMakeQueries(t *testing.T) {
 		{
 			message:   "Empty metric stats should produce empty results",
 			collector: stripInterface(CollectorFromConfig(CollectorConfig{Type: "ebs"})),
-			resources: []*tagging.ResourceTagMapping{
+			resources: []taggingTypes.ResourceTagMapping{
 				{
 					ResourceARN: aws.String("arn:aws:ec2:us-east-1:000000000000:volume/vol-fffffffffffffffff"),
 				},
 			},
-			expected: []*cloudwatch.MetricDataQuery{},
+			expected: []cwTypes.MetricDataQuery{},
 		},
 		{
 			message: "Resources should be properly zipped into metric data queries",
@@ -163,7 +165,7 @@ func TestMakeQueries(t *testing.T) {
 					},
 				},
 			})),
-			resources: []*tagging.ResourceTagMapping{
+			resources: []taggingTypes.ResourceTagMapping{
 				{
 					ResourceARN: aws.String("arn:aws:ec2:us-east-1:000000000000:volume/vol-fffffffffffffffff"),
 				},
@@ -171,16 +173,16 @@ func TestMakeQueries(t *testing.T) {
 					ResourceARN: aws.String("arn:aws:ec2:us-east-1:000000000000:volume/vol-00000000000000000"),
 				},
 			},
-			expected: []*cloudwatch.MetricDataQuery{
+			expected: []cwTypes.MetricDataQuery{
 				{
 					Id: aws.String("id_43c1360ea31ff82de65453d44cabeb5307b8a1f5_0"),
-					MetricStat: &cloudwatch.MetricStat{
+					MetricStat: &cwTypes.MetricStat{
 						Stat:   aws.String("Sum"),
-						Period: aws.Int64(300),
-						Metric: &cloudwatch.Metric{
+						Period: aws.Int32(300),
+						Metric: &cwTypes.Metric{
 							MetricName: aws.String("MyMetricName"),
 							Namespace:  aws.String("AWS/EBS"),
-							Dimensions: []*cloudwatch.Dimension{
+							Dimensions: []cwTypes.Dimension{
 								{
 									Name:  aws.String("VolumeId"),
 									Value: aws.String("vol-00000000000000000"),
@@ -191,13 +193,13 @@ func TestMakeQueries(t *testing.T) {
 				},
 				{
 					Id: aws.String("id_43c1360ea31ff82de65453d44cabeb5307b8a1f5_1"),
-					MetricStat: &cloudwatch.MetricStat{
+					MetricStat: &cwTypes.MetricStat{
 						Stat:   aws.String("Average"),
-						Period: aws.Int64(300),
-						Metric: &cloudwatch.Metric{
+						Period: aws.Int32(300),
+						Metric: &cwTypes.Metric{
 							MetricName: aws.String("MyOtherMetricName"),
 							Namespace:  aws.String("AWS/EBS"),
-							Dimensions: []*cloudwatch.Dimension{
+							Dimensions: []cwTypes.Dimension{
 								{
 									Name:  aws.String("VolumeId"),
 									Value: aws.String("vol-00000000000000000"),
@@ -208,13 +210,13 @@ func TestMakeQueries(t *testing.T) {
 				},
 				{
 					Id: aws.String("id_d714b664b1f99367e6962cabb2463495ce4aa395_0"),
-					MetricStat: &cloudwatch.MetricStat{
+					MetricStat: &cwTypes.MetricStat{
 						Stat:   aws.String("Sum"),
-						Period: aws.Int64(300),
-						Metric: &cloudwatch.Metric{
+						Period: aws.Int32(300),
+						Metric: &cwTypes.Metric{
 							MetricName: aws.String("MyMetricName"),
 							Namespace:  aws.String("AWS/EBS"),
-							Dimensions: []*cloudwatch.Dimension{
+							Dimensions: []cwTypes.Dimension{
 								{
 									Name:  aws.String("VolumeId"),
 									Value: aws.String("vol-fffffffffffffffff"),
@@ -225,13 +227,13 @@ func TestMakeQueries(t *testing.T) {
 				},
 				{
 					Id: aws.String("id_d714b664b1f99367e6962cabb2463495ce4aa395_1"),
-					MetricStat: &cloudwatch.MetricStat{
+					MetricStat: &cwTypes.MetricStat{
 						Stat:   aws.String("Average"),
-						Period: aws.Int64(300),
-						Metric: &cloudwatch.Metric{
+						Period: aws.Int32(300),
+						Metric: &cwTypes.Metric{
 							MetricName: aws.String("MyOtherMetricName"),
 							Namespace:  aws.String("AWS/EBS"),
-							Dimensions: []*cloudwatch.Dimension{
+							Dimensions: []cwTypes.Dimension{
 								{
 									Name:  aws.String("VolumeId"),
 									Value: aws.String("vol-fffffffffffffffff"),
@@ -269,12 +271,12 @@ func TestGetMetricDataInput(t *testing.T) {
 	cases := []struct {
 		message   string
 		collector *BaseCollector
-		resources []*tagging.ResourceTagMapping
+		resources []taggingTypes.ResourceTagMapping
 		expected  []*cloudwatch.GetMetricDataInput
 	}{
 		{
 			collector: stripInterface(CollectorFromConfig(CollectorConfig{Type: "ebs"})).withTime(ttime),
-			resources: []*tagging.ResourceTagMapping{},
+			resources: []taggingTypes.ResourceTagMapping{},
 			expected:  []*cloudwatch.GetMetricDataInput{},
 			message:   "Empty index should produce empty metric data input",
 		},
@@ -283,7 +285,7 @@ func TestGetMetricDataInput(t *testing.T) {
 				Type:        "ebs",
 				MetricStats: []MetricStat{},
 			})).withTime(ttime),
-			resources: []*tagging.ResourceTagMapping{
+			resources: []taggingTypes.ResourceTagMapping{
 				{
 					ResourceARN: aws.String("arn:aws:ec2:us-east-1:000000000000:volume/vol-fffffffffffffffff"),
 				},
@@ -311,7 +313,7 @@ func TestGetMetricDataInput(t *testing.T) {
 					},
 				},
 			})).withTime(ttime),
-			resources: []*tagging.ResourceTagMapping{
+			resources: []taggingTypes.ResourceTagMapping{
 				{
 					ResourceARN: aws.String("arn:aws:ec2:us-east-1:000000000000:volume/vol-fffffffffffffffff"),
 				},
@@ -323,13 +325,13 @@ func TestGetMetricDataInput(t *testing.T) {
 				{
 					EndTime:   &endTime,
 					StartTime: &startTime,
-					ScanBy:    &TimestampAscending,
-					MetricDataQueries: []*cloudwatch.MetricDataQuery{
+					ScanBy:    cwTypes.ScanByTimestampAscending,
+					MetricDataQueries: []cwTypes.MetricDataQuery{
 						{
 							Id: aws.String("id_43c1360ea31ff82de65453d44cabeb5307b8a1f5_0"),
-							MetricStat: &cloudwatch.MetricStat{
-								Metric: &cloudwatch.Metric{
-									Dimensions: []*cloudwatch.Dimension{
+							MetricStat: &cwTypes.MetricStat{
+								Metric: &cwTypes.Metric{
+									Dimensions: []cwTypes.Dimension{
 										{
 											Name:  aws.String("VolumeId"),
 											Value: aws.String("vol-00000000000000000"),
@@ -339,14 +341,14 @@ func TestGetMetricDataInput(t *testing.T) {
 									Namespace:  aws.String("AWS/EBS"),
 								},
 								Stat:   aws.String("Sum"),
-								Period: aws.Int64(int64(period)),
+								Period: aws.Int32(int32(period)),
 							},
 						},
 						{
 							Id: aws.String("id_43c1360ea31ff82de65453d44cabeb5307b8a1f5_1"),
-							MetricStat: &cloudwatch.MetricStat{
-								Metric: &cloudwatch.Metric{
-									Dimensions: []*cloudwatch.Dimension{
+							MetricStat: &cwTypes.MetricStat{
+								Metric: &cwTypes.Metric{
+									Dimensions: []cwTypes.Dimension{
 										{
 											Name:  aws.String("VolumeId"),
 											Value: aws.String("vol-00000000000000000"),
@@ -356,14 +358,14 @@ func TestGetMetricDataInput(t *testing.T) {
 									Namespace:  aws.String("AWS/EBS"),
 								},
 								Stat:   aws.String("Average"),
-								Period: aws.Int64(int64(period)),
+								Period: aws.Int32(int32(period)),
 							},
 						},
 						{
 							Id: aws.String("id_d714b664b1f99367e6962cabb2463495ce4aa395_0"),
-							MetricStat: &cloudwatch.MetricStat{
-								Metric: &cloudwatch.Metric{
-									Dimensions: []*cloudwatch.Dimension{
+							MetricStat: &cwTypes.MetricStat{
+								Metric: &cwTypes.Metric{
+									Dimensions: []cwTypes.Dimension{
 										{
 											Name:  aws.String("VolumeId"),
 											Value: aws.String("vol-fffffffffffffffff"),
@@ -373,14 +375,14 @@ func TestGetMetricDataInput(t *testing.T) {
 									Namespace:  aws.String("AWS/EBS"),
 								},
 								Stat:   aws.String("Sum"),
-								Period: aws.Int64(int64(period)),
+								Period: aws.Int32(int32(period)),
 							},
 						},
 						{
 							Id: aws.String("id_d714b664b1f99367e6962cabb2463495ce4aa395_1"),
-							MetricStat: &cloudwatch.MetricStat{
-								Metric: &cloudwatch.Metric{
-									Dimensions: []*cloudwatch.Dimension{
+							MetricStat: &cwTypes.MetricStat{
+								Metric: &cwTypes.Metric{
+									Dimensions: []cwTypes.Dimension{
 										{
 											Name:  aws.String("VolumeId"),
 											Value: aws.String("vol-fffffffffffffffff"),
@@ -390,7 +392,7 @@ func TestGetMetricDataInput(t *testing.T) {
 									Namespace:  aws.String("AWS/EBS"),
 								},
 								Stat:   aws.String("Average"),
-								Period: aws.Int64(int64(period)),
+								Period: aws.Int32(int32(period)),
 							},
 						},
 					},

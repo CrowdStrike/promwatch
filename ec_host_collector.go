@@ -2,14 +2,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/arn"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	ecTypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 )
 
 type ECHostCollector struct {
@@ -17,11 +19,11 @@ type ECHostCollector struct {
 }
 
 type CacheClusterWithTags struct {
-	elasticache.CacheCluster
-	Tags []*tagging.Tag
+	ecTypes.CacheCluster
+	Tags []taggingTypes.Tag
 }
 
-func NewCacheClusterWithTags(c elasticache.CacheCluster, t []*tagging.Tag) *CacheClusterWithTags {
+func NewCacheClusterWithTags(c ecTypes.CacheCluster, t []taggingTypes.Tag) *CacheClusterWithTags {
 	return &CacheClusterWithTags{
 		CacheCluster: c,
 		Tags:         t,
@@ -51,7 +53,7 @@ func (a *ECHostCollector) getClusters() (*ResourceIndex, error) {
 	if err != nil {
 		return nil, err
 	}
-	resourceMap := make(map[string][]*tagging.Tag, len(resources.Resources))
+	resourceMap := make(map[string][]taggingTypes.Tag, len(resources.Resources))
 
 	for _, r := range resources.Resources {
 		resourceMap[*r.ResourceARN] = r.Tags
@@ -62,7 +64,7 @@ func (a *ECHostCollector) getClusters() (*ResourceIndex, error) {
 		return nil, err
 	}
 
-	res, err := client.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{
+	res, err := client.DescribeCacheClusters(context.TODO(), &elasticache.DescribeCacheClustersInput{
 		ShowCacheClustersNotInReplicationGroups: aws.Bool(true),
 		ShowCacheNodeInfo:                       aws.Bool(true),
 	}, a.base.Telemetry())
@@ -81,21 +83,21 @@ func (a *ECHostCollector) getClusters() (*ResourceIndex, error) {
 		if !ok {
 			continue
 		}
-		cluster := NewCacheClusterWithTags(*c, rt)
+		cluster := NewCacheClusterWithTags(c, rt)
 		cacheClusters = append(cacheClusters, cluster)
 	}
 
 	// convert cache clusters to resource tag mapping
-	mapping := []*tagging.ResourceTagMapping{}
+	mapping := []taggingTypes.ResourceTagMapping{}
 	for _, cluster := range cacheClusters {
 		for _, n := range cluster.CacheNodes {
 			// append node id to the cluster name so it looks similar to a redis cluster id
 			arnWithNodeID := fmt.Sprintf("%s:%s", *cluster.ARN, *n.CacheNodeId)
-			mapping = append(mapping, &tagging.ResourceTagMapping{
+			mapping = append(mapping, taggingTypes.ResourceTagMapping{
 				ResourceARN: &arnWithNodeID,
 				Tags:        cluster.Tags,
 			})
-			Logger.Debugf("Cache ARN: %s", aws.StringValue(cluster.ARN))
+			Logger.Debugf("Cache ARN: %s", aws.ToString(cluster.ARN))
 		}
 	}
 
@@ -106,20 +108,20 @@ func (a *ECHostCollector) Run() *CollectorProc {
 	return a.base.run(a.getClusters, cacheNodeMetricDimension)
 }
 
-func cacheNodeMetricDimension(resource *tagging.ResourceTagMapping) ([]*cloudwatch.Dimension, error) {
-	arn, err := arn.Parse(*resource.ResourceARN)
+func cacheNodeMetricDimension(resource *taggingTypes.ResourceTagMapping) ([]cwTypes.Dimension, error) {
+	arnParsed, err := arn.Parse(*resource.ResourceARN)
 	if err != nil {
-		return []*cloudwatch.Dimension{}, ErrCanNotParseARN
+		return []cwTypes.Dimension{}, ErrCanNotParseARN
 	}
 
 	// Resources e.g.: cluster:my-asg-name:0001
 	// to cluster: my-cluster-name, node: 0001
 
-	val := strings.Split(arn.Resource, ":")
+	val := strings.Split(arnParsed.Resource, ":")
 	cluster := val[1]
 	node := val[2]
 
-	return []*cloudwatch.Dimension{
+	return []cwTypes.Dimension{
 		{Name: aws.String("CacheClusterId"), Value: aws.String(cluster)},
 		{Name: aws.String("CacheNodeId"), Value: aws.String(node)},
 	}, nil

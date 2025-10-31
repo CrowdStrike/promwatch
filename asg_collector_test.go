@@ -4,22 +4,22 @@ package main
 import (
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	autoscalingTypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestFilter(t *testing.T) {
 	cases := []struct {
-		groups     []*autoscaling.Group
+		groups     []autoscalingTypes.AutoScalingGroup
 		tagfilters []TagFilter
-		expected   []*autoscaling.Group
+		expected   []autoscalingTypes.AutoScalingGroup
 		message    string
 	}{
 		{
-			groups: []*autoscaling.Group{
+			groups: []autoscalingTypes.AutoScalingGroup{
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("testTag"),
 							Value: aws.String("testValue"),
@@ -31,7 +31,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("someTag"),
 							Value: aws.String("someValue"),
@@ -44,9 +44,9 @@ func TestFilter(t *testing.T) {
 				},
 			},
 			tagfilters: []TagFilter{},
-			expected: []*autoscaling.Group{
+			expected: []autoscalingTypes.AutoScalingGroup{
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("testTag"),
 							Value: aws.String("testValue"),
@@ -58,7 +58,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("someTag"),
 							Value: aws.String("someValue"),
@@ -73,9 +73,9 @@ func TestFilter(t *testing.T) {
 			message: "Empty tag filters should yield all groups",
 		},
 		{
-			groups: []*autoscaling.Group{
+			groups: []autoscalingTypes.AutoScalingGroup{
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("testTag"),
 							Value: aws.String("testValue"),
@@ -87,7 +87,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("someTag"),
 							Value: aws.String("someValue"),
@@ -102,9 +102,9 @@ func TestFilter(t *testing.T) {
 			tagfilters: []TagFilter{
 				{Key: "someTag", Value: "someValue"},
 			},
-			expected: []*autoscaling.Group{
+			expected: []autoscalingTypes.AutoScalingGroup{
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("someTag"),
 							Value: aws.String("someValue"),
@@ -119,9 +119,9 @@ func TestFilter(t *testing.T) {
 			message: "Filter should only return groups matching tags",
 		},
 		{
-			groups: []*autoscaling.Group{
+			groups: []autoscalingTypes.AutoScalingGroup{
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("testTag"),
 							Value: aws.String("testValue"),
@@ -133,7 +133,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Tags: []*autoscaling.TagDescription{
+					Tags: []autoscalingTypes.TagDescription{
 						{
 							Key:   aws.String("someTag"),
 							Value: aws.String("someValue"),
@@ -148,13 +148,13 @@ func TestFilter(t *testing.T) {
 			tagfilters: []TagFilter{
 				{Key: "no", Value: "match"},
 			},
-			expected: []*autoscaling.Group{},
+			expected: []autoscalingTypes.AutoScalingGroup{},
 			message:  "No match should return empty result",
 		},
 	}
 
 	for _, c := range cases {
 		got := filter(&c.groups, c.tagfilters)
-		assert.Equal(t, &c.expected, got, c.message)
+		assert.Equal(t, c.expected, got, c.message)
 	}
 }

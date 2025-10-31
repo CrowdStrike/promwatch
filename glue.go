@@ -12,15 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/arn"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	t "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 )
-
-// TimestampAscending is used to sort results received from CloudWatch.
-var TimestampAscending = "TimestampAscending"
 
 var ErrCanNotParseARN = errors.New("can not parse the provided ARN")
 var ErrNoSuchCollectorType = errors.New("unknown collector type in configuration")
@@ -30,11 +26,11 @@ type CollectorID string
 // implementations of extraTags should take a resource mapping and create a list
 // of tags mixing in any additional tags that should show up on the Prometheus
 // metrcis as labels.
-type extraTags func(*tagging.ResourceTagMapping) ([]*tagging.Tag, error)
+type extraTags func(*taggingTypes.ResourceTagMapping) ([]taggingTypes.Tag, error)
 
 // implementations of metricDimensions should produce dimensions to query
 // CloudWatch with from a resource tag mapping.
-type metricDimensions func(*tagging.ResourceTagMapping) ([]*cloudwatch.Dimension, error)
+type metricDimensions func(*taggingTypes.ResourceTagMapping) ([]cwTypes.Dimension, error)
 
 // implementations of resourceGetter should get a list of AWS resources from any
 // source (AWS APIs or otherwise) and prepare a ResourceIndex that can be used
@@ -109,15 +105,15 @@ var collectorTypes = map[string]*CollectorType{
 }
 
 func CollectorFromConfig(c CollectorConfig) (MetricCollector, error) {
-	if t, ok := collectorTypes[c.Type]; ok {
+	if typ, ok := collectorTypes[c.Type]; ok {
 		Logger.Debugf("Found collector type %s", c.Type)
 
 		return &BaseCollector{
 			config:         c,
-			namespace:      t.Namespace,
-			resourceName:   t.ResourceName,
-			dimension:      t.Dimension,
-			resourcePrefix: t.ResourcePrefix,
+			namespace:      typ.Namespace,
+			resourceName:   typ.ResourceName,
+			dimension:      typ.Dimension,
+			resourcePrefix: typ.ResourcePrefix,
 		}, nil
 	}
 
@@ -204,7 +200,7 @@ func (t *testTime) Now() time.Time {
 }
 
 // id creates a sha1 from the resource ARN provided by AWS.
-func id(r *t.ResourceTagMapping) string {
+func id(r *taggingTypes.ResourceTagMapping) string {
 	// sha1 is good enough for this use case, disabling linter.
 	h := sha1.New() // nolint:gosec
 	_, _ = h.Write([]byte(*r.ResourceARN))
@@ -254,36 +250,36 @@ func escapeValue(str string) string {
 // index keys) when iterating over one of the indices.
 type ResourceIndex struct {
 	// Queries and Results are used for all collectors
-	Queries map[string][]*cloudwatch.MetricDataQuery
-	Results map[string]*cloudwatch.MetricDataResult
+	Queries map[string][]cwTypes.MetricDataQuery
+	Results map[string]cwTypes.MetricDataResult
 	// Resources is used for all services that are supported by the
 	// resourcegroupstaggingapi
-	Resources map[string]*t.ResourceTagMapping
+	Resources map[string]taggingTypes.ResourceTagMapping
 }
 
 // NewResourceIndex returns *ResourceIndex with initialized properties.
 func NewResourceIndex() *ResourceIndex {
 	return &ResourceIndex{
-		Queries:   make(map[string][]*cloudwatch.MetricDataQuery),
-		Results:   make(map[string]*cloudwatch.MetricDataResult),
-		Resources: make(map[string]*t.ResourceTagMapping),
+		Queries:   make(map[string][]cwTypes.MetricDataQuery),
+		Results:   make(map[string]cwTypes.MetricDataResult),
+		Resources: make(map[string]taggingTypes.ResourceTagMapping),
 	}
 }
 
 // NewResourceIndexFromTagMapping creates a *ResourceIndex from a resource tag
 // mapping and an extractor function that will create an ID used to correlate
 // resources, queries, and results.
-func NewResourceIndexFromTagMapping(r *[]*t.ResourceTagMapping, ex func(*t.ResourceTagMapping) string) *ResourceIndex {
+func NewResourceIndexFromTagMapping(r *[]taggingTypes.ResourceTagMapping, ex func(*taggingTypes.ResourceTagMapping) string) *ResourceIndex {
 	index := NewResourceIndex()
 
 	for _, item := range *r {
-		index.Resources[ex(item)] = item
+		index.Resources[ex(&item)] = item
 	}
 
 	return index
 }
 
-func (i *ResourceIndex) AddResults(res *[]*cloudwatch.MetricDataResult) {
+func (i *ResourceIndex) AddResults(res *[]cwTypes.MetricDataResult) {
 	for _, r := range *res {
 		i.Results[*r.Id] = r
 	}
@@ -291,15 +287,15 @@ func (i *ResourceIndex) AddResults(res *[]*cloudwatch.MetricDataResult) {
 
 // tagsToString transforms tags into a string of Prometheus compatible metrics
 // labels.
-func tagsToString(tags []*t.Tag) string {
+func tagsToString(tags []taggingTypes.Tag) string {
 	buf := bytes.Buffer{}
-	for i, t := range tags {
+	for i, tag := range tags {
 		sep := ","
 		if i == len(tags)-1 {
 			sep = ""
 		}
 
-		fmt.Fprintf(&buf, `%s="%s"%s`, toSnakeCase(sanitize(*t.Key)), escapeValue(*t.Value), sep)
+		fmt.Fprintf(&buf, `%s="%s"%s`, toSnakeCase(sanitize(*tag.Key)), escapeValue(*tag.Value), sep)
 	}
 
 	return buf.String()
@@ -307,16 +303,16 @@ func tagsToString(tags []*t.Tag) string {
 
 // convertTags transforms AWS tags and extra tags into a string of Prometheus
 // compatible metrics labels.
-func convertTags(resource *t.ResourceTagMapping, mergeTags []string, tags ...*t.Tag) string {
+func convertTags(resource *taggingTypes.ResourceTagMapping, mergeTags []string, tags ...taggingTypes.Tag) string {
 	merge := map[string]struct{}{}
 
-	for _, t := range mergeTags {
-		merge[t] = struct{}{}
+	for _, tag := range mergeTags {
+		merge[tag] = struct{}{}
 	}
 
-	for _, t := range resource.Tags {
-		if _, ok := merge[*t.Key]; ok {
-			tags = append(tags, t)
+	for _, tag := range resource.Tags {
+		if _, ok := merge[*tag.Key]; ok {
+			tags = append(tags, tag)
 		}
 	}
 
@@ -326,8 +322,8 @@ func convertTags(resource *t.ResourceTagMapping, mergeTags []string, tags ...*t.
 // defaultExtraTags returns an extraTags function that adds the resource arn and
 // dimension to the tags that end up being Prometheus compatible metrics labels.
 func defaultExtraTags(dimension, resourcePrefix string) extraTags {
-	return func(resource *tagging.ResourceTagMapping) ([]*tagging.Tag, error) {
-		tags := []*tagging.Tag{
+	return func(resource *taggingTypes.ResourceTagMapping) ([]taggingTypes.Tag, error) {
+		tags := []taggingTypes.Tag{
 			{
 				Key:   aws.String("arn"),
 				Value: resource.ResourceARN,
@@ -340,7 +336,7 @@ func defaultExtraTags(dimension, resourcePrefix string) extraTags {
 		}
 
 		val := strings.TrimPrefix(arn.Resource, resourcePrefix)
-		tags = append(tags, &tagging.Tag{
+		tags = append(tags, taggingTypes.Tag{
 			Key:   aws.String(dimension),
 			Value: aws.String(val),
 		})
@@ -353,14 +349,14 @@ func defaultExtraTags(dimension, resourcePrefix string) extraTags {
 // dimension and resource prefix to derive the dimension value from passed in
 // resources.
 func defaultMetricDimension(dimension, resourcePrefix string) metricDimensions {
-	return func(resource *tagging.ResourceTagMapping) ([]*cloudwatch.Dimension, error) {
-		arn, err := arn.Parse(*resource.ResourceARN)
+	return func(resource *taggingTypes.ResourceTagMapping) ([]cwTypes.Dimension, error) {
+		arnParsed, err := arn.Parse(*resource.ResourceARN)
 		if err != nil {
-			return []*cloudwatch.Dimension{}, ErrCanNotParseARN
+			return []cwTypes.Dimension{}, ErrCanNotParseARN
 		}
 
-		val := strings.TrimPrefix(arn.Resource, resourcePrefix)
+		val := strings.TrimPrefix(arnParsed.Resource, resourcePrefix)
 
-		return []*cloudwatch.Dimension{{Name: aws.String(dimension), Value: aws.String(val)}}, nil
+		return []cwTypes.Dimension{{Name: aws.String(dimension), Value: aws.String(val)}}, nil
 	}
 }

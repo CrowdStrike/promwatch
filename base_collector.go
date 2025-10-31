@@ -3,12 +3,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	tagging "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -90,14 +93,14 @@ func (b *BaseCollector) ID() CollectorID {
 // ResourceGroupsTaggingAPI with the resource type and configured tag filters.
 func (b *BaseCollector) getResourcesInput(resourceType string) *tagging.GetResourcesInput {
 	in := tagging.GetResourcesInput{
-		ResourceTypeFilters: []*string{aws.String(resourceType)},
-		TagFilters:          []*tagging.TagFilter{},
+		ResourceTypeFilters: []string{resourceType},
+		TagFilters:          []taggingTypes.TagFilter{},
 	}
 
 	for _, f := range b.config.TagFilters {
-		in.TagFilters = append(in.TagFilters, &tagging.TagFilter{
+		in.TagFilters = append(in.TagFilters, taggingTypes.TagFilter{
 			Key:    aws.String(f.Key),
-			Values: []*string{aws.String(f.Value)},
+			Values: []string{f.Value},
 		})
 	}
 
@@ -111,9 +114,9 @@ func (b *BaseCollector) storeResults(index *ResourceIndex) {
 	buf := bytes.Buffer{}
 	for id, r := range index.Resources {
 		Logger.Debugw(*r.ResourceARN, "id", b.ID(), "name", b.config.Name, "type", b.config.Type)
-		tags, err := defaultExtraTags(b.dimension, b.resourcePrefix)(r)
+		tags, err := defaultExtraTags(b.dimension, b.resourcePrefix)(&r)
 		_ = b.HandleError(err)
-		t := convertTags(r, b.config.MergeTags, tags...)
+		t := convertTags(&r, b.config.MergeTags, tags...)
 		for _, query := range index.Queries[id] {
 			res, ok := index.Results[*query.Id]
 			if !ok {
@@ -128,7 +131,7 @@ func (b *BaseCollector) storeResults(index *ResourceIndex) {
 					toSnakeCase(sanitize(*query.MetricStat.Metric.MetricName)),
 					toSnakeCase(sanitize(*query.MetricStat.Stat)),
 					t,
-					*v,
+					v,
 					index.Results[*query.Id].Timestamps[i].Unix()*1000)
 			}
 		}
@@ -140,29 +143,29 @@ func (b *BaseCollector) storeResults(index *ResourceIndex) {
 // makeQueries produces a list of CloudWatch metrics data queries from the
 // resources in the passed in ResourceIndex and the collector config that
 // defines the metrics that are supposed to be queried.
-func (b *BaseCollector) makeQueries(index *ResourceIndex, namespace string, dimensions metricDimensions) []*cloudwatch.MetricDataQuery {
-	dataQuery := []*cloudwatch.MetricDataQuery{}
+func (b *BaseCollector) makeQueries(index *ResourceIndex, namespace string, dimensions metricDimensions) []cwTypes.MetricDataQuery {
+	dataQuery := []cwTypes.MetricDataQuery{}
 	for id, r := range index.Resources {
 		for i, s := range b.config.MetricStats {
-			d, err := dimensions(r)
+			d, err := dimensions(&r)
 			if err != nil {
 				_ = b.HandleError(err)
 				continue
 			}
-			query := cloudwatch.MetricDataQuery{
+			query := cwTypes.MetricDataQuery{
 				Id: aws.String(fmt.Sprintf("%s_%s_%d", "id", id, i)),
-				MetricStat: &cloudwatch.MetricStat{
-					Metric: &cloudwatch.Metric{
+				MetricStat: &cwTypes.MetricStat{
+					Metric: &cwTypes.Metric{
 						Dimensions: d,
 						MetricName: aws.String(s.MetricName),
 						Namespace:  aws.String(namespace),
 					},
-					Period: aws.Int64(int64(b.config.Period)),
+					Period: aws.Int32(int32(b.config.Period)), // nolint:gosec // CloudWatch periods are small values
 					Stat:   aws.String(s.Stat),
 				},
 			}
-			dataQuery = append(dataQuery, &query)
-			index.Queries[id] = append(index.Queries[id], &query)
+			dataQuery = append(dataQuery, query)
+			index.Queries[id] = append(index.Queries[id], query)
 		}
 	}
 
@@ -193,7 +196,7 @@ func (b *BaseCollector) getMetricDataInput(index *ResourceIndex, dim metricDimen
 			// Order matters later in the Prometheus metrics output where
 			// timestamps have to be ordered as Prometheus will only ingest
 			// ascending timestamps for the same time series.
-			ScanBy:            &TimestampAscending,
+			ScanBy:            cwTypes.ScanByTimestampAscending,
 			MetricDataQueries: dataQuery[i:end],
 		}
 
@@ -249,7 +252,7 @@ func (b *BaseCollector) getResources() (*ResourceIndex, error) {
 	}
 
 	input := b.getResourcesInput(b.resourceName)
-	resources, err := client.GetResources(input, b.Telemetry())
+	resources, err := client.GetResources(context.TODO(), input, b.Telemetry())
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +269,7 @@ func (b *BaseCollector) getMetrics(index *ResourceIndex, dim metricDimensions) {
 		return
 	}
 
-	res, err := client.GetMetricData(in, b.Telemetry())
+	res, err := client.GetMetricData(context.TODO(), in, b.Telemetry())
 	if err != nil {
 		_ = b.HandleError(err)
 	}

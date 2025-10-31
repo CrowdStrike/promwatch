@@ -4,25 +4,25 @@ package main
 import (
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCacheNodeMetricDimension(t *testing.T) {
 	cases := []struct {
-		resource       *tagging.ResourceTagMapping
-		expected       []*cloudwatch.Dimension
+		resource       *taggingTypes.ResourceTagMapping
+		expected       []cwTypes.Dimension
 		expectedErrors []error
 		message        string
 	}{
 		{
 			message: "Resource should return properly formatted metric dimensions",
-			resource: &tagging.ResourceTagMapping{
+			resource: &taggingTypes.ResourceTagMapping{
 				ResourceARN: aws.String("arn:aws:ec2:us-east-1:000000000000:cluster:my-asg-name:0001"),
 			},
-			expected: []*cloudwatch.Dimension{
+			expected: []cwTypes.Dimension{
 				{
 					Name:  aws.String("CacheClusterId"),
 					Value: aws.String("my-asg-name"),

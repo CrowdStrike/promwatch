@@ -4,8 +4,8 @@ package main
 import (
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	taggingTypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -49,12 +49,12 @@ func TestSanitize(t *testing.T) {
 
 func TestNewResourceIndexFromTagMapping(t *testing.T) {
 	testARN := "aws:arn:test"
-	resources := []*tagging.ResourceTagMapping{
+	resources := []taggingTypes.ResourceTagMapping{
 		{
 			ResourceARN: aws.String(testARN),
 		},
 	}
-	index := NewResourceIndexFromTagMapping(&resources, func(m *tagging.ResourceTagMapping) string {
+	index := NewResourceIndexFromTagMapping(&resources, func(m *taggingTypes.ResourceTagMapping) string {
 		return *m.ResourceARN
 	})
 
@@ -65,20 +65,20 @@ func TestNewResourceIndexFromTagMapping(t *testing.T) {
 
 func TestConvertTags(t *testing.T) {
 	cases := []struct {
-		resource  *tagging.ResourceTagMapping
+		resource  *taggingTypes.ResourceTagMapping
 		mergeTags []string
-		extraTags []*tagging.Tag
+		extraTags []taggingTypes.Tag
 		expected  string
 		message   string
 	}{
 		{
-			resource: &tagging.ResourceTagMapping{Tags: []*tagging.Tag{}},
+			resource: &taggingTypes.ResourceTagMapping{Tags: []taggingTypes.Tag{}},
 			expected: ``,
 			message:  "No tags on the resource should produce the default set of tags",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
-				Tags: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{
+				Tags: []taggingTypes.Tag{
 					{
 						Key:   aws.String("someTagKey"),
 						Value: aws.String("someTagValue"),
@@ -97,8 +97,8 @@ func TestConvertTags(t *testing.T) {
 			message:  "Tags configured to be merged should be converted",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
-				Tags: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{
+				Tags: []taggingTypes.Tag{
 					{
 						Key:   aws.String("someTag%Key"),
 						Value: aws.String("someTagValue"),
@@ -112,8 +112,8 @@ func TestConvertTags(t *testing.T) {
 			message:  "Tags containing % should be represented correctly",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
-				Tags: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{
+				Tags: []taggingTypes.Tag{
 					{
 						Key:   aws.String("someTagKey"),
 						Value: aws.String(`"someTag\"Value"`),
@@ -127,8 +127,8 @@ func TestConvertTags(t *testing.T) {
 			message:  "Tag values should be escaped",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
-				Tags: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{
+				Tags: []taggingTypes.Tag{
 					{
 						Key:   aws.String("someTagKey"),
 						Value: aws.String(`“insane"`),
@@ -142,8 +142,8 @@ func TestConvertTags(t *testing.T) {
 			message:  "Tag values should be escaped",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
-				Tags: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{
+				Tags: []taggingTypes.Tag{
 					{
 						Key:   aws.String("someTagKey"),
 						Value: aws.String("someTagValue"),
@@ -166,8 +166,8 @@ func TestConvertTags(t *testing.T) {
 			message:  "Only tags configured to be merged should be converted",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
-				Tags: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{
+				Tags: []taggingTypes.Tag{
 					{
 						Key:   aws.String("someTagKey"),
 						Value: aws.String("someTagValue"),
@@ -182,7 +182,7 @@ func TestConvertTags(t *testing.T) {
 				"someTagKey",
 				"mergeMe",
 			},
-			extraTags: []*tagging.Tag{
+			extraTags: []taggingTypes.Tag{
 				{
 					Key:   aws.String("extra"),
 					Value: aws.String("tagValue"),
@@ -204,14 +204,14 @@ func TestConvertTags(t *testing.T) {
 
 func TestExtraTagsCallback(t *testing.T) {
 	cases := []struct {
-		resource      *tagging.ResourceTagMapping
-		expected      []*tagging.Tag
+		resource      *taggingTypes.ResourceTagMapping
+		expected      []taggingTypes.Tag
 		expectedError error
 		message       string
 	}{
 		{
-			resource: &tagging.ResourceTagMapping{ResourceARN: aws.String("invalid")},
-			expected: []*tagging.Tag{
+			resource: &taggingTypes.ResourceTagMapping{ResourceARN: aws.String("invalid")},
+			expected: []taggingTypes.Tag{
 				{
 					Key:   aws.String("arn"),
 					Value: aws.String("invalid"),
@@ -221,10 +221,10 @@ func TestExtraTagsCallback(t *testing.T) {
 			message:       "An invalid ARN should result in an error",
 		},
 		{
-			resource: &tagging.ResourceTagMapping{
+			resource: &taggingTypes.ResourceTagMapping{
 				ResourceARN: aws.String("arn:aws:ec2:us-east-1:00000000000:volume/vol-0000000000000000"),
 			},
-			expected: []*tagging.Tag{
+			expected: []taggingTypes.Tag{
 				{
 					Key:   aws.String("arn"),
 					Value: aws.String("arn:aws:ec2:us-east-1:00000000000:volume/vol-0000000000000000"),
