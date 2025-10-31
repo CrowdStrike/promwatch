@@ -34,7 +34,7 @@ func (s *naiveStore) Add(str string) {
 	s.internal.WriteString(str)
 }
 
-// String returns the store as string
+// String returns the store as string.
 func (s *naiveStore) String() string {
 	s.Lock()
 	defer s.Unlock()

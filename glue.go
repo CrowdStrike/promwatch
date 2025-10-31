@@ -4,7 +4,7 @@ package main
 import (
 	"bytes"
 
-	// sha1 is good enough for this use case, disabling linter
+	// sha1 is good enough for this use case, disabling linter.
 	"crypto/sha1" // nolint:gosec
 	"errors"
 	"fmt"
@@ -19,11 +19,11 @@ import (
 	tagging "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
 )
 
-// TimestampAscending is used to sort results received from CloudWatch
+// TimestampAscending is used to sort results received from CloudWatch.
 var TimestampAscending = "TimestampAscending"
 
-var ErrCanNotParseARN = errors.New("Can not parse the provided ARN")
-var ErrNoSuchCollectorType = errors.New("Unknown collector type in configuration")
+var ErrCanNotParseARN = errors.New("can not parse the provided ARN")
+var ErrNoSuchCollectorType = errors.New("unknown collector type in configuration")
 
 type CollectorID string
 
@@ -203,9 +203,9 @@ func (t *testTime) Now() time.Time {
 	return *t.now
 }
 
-// id creates a sha1 from the resource ARN provided by AWS
+// id creates a sha1 from the resource ARN provided by AWS.
 func id(r *t.ResourceTagMapping) string {
-	// sha1 is good enough for this use case, disabling linter
+	// sha1 is good enough for this use case, disabling linter.
 	h := sha1.New() // nolint:gosec
 	_, _ = h.Write([]byte(*r.ResourceARN))
 	return fmt.Sprintf("%x", h.Sum(nil))

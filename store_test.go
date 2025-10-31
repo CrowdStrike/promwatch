@@ -27,6 +27,7 @@ func TestNaiveStore(t *testing.T) {
 	s.Commit()
 	assert.Equal(t, expected, s.String(), "Store should contain both added values after commit")
 
-	n := s.(*naiveStore)
+	n, ok := s.(*naiveStore)
+	assert.True(t, ok, "Store should be of type naiveStore")
 	assert.Equal(t, "", n.internal.String(), "Internal buffer should be empty after commit")
 }
