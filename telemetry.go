@@ -10,7 +10,7 @@ import (
 var registry = prometheus.NewRegistry()
 
 var (
-	// PromWatch build information
+	// PromWatch build information.
 	buildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "promwatch_build_info",
 		Help: "PromWatch build information.",

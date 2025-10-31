@@ -33,7 +33,7 @@ type BaseCollector struct {
 // .Errors() method and returns false.
 func (b *BaseCollector) Valid() bool {
 	if b.config.Offset < b.config.Interval {
-		err := fmt.Errorf("Offset must be greater than interval. Offset: %d, Interval: %d", b.config.Offset, b.config.Interval)
+		err := fmt.Errorf("offset must be greater than interval. Offset: %d, Interval: %d", b.config.Offset, b.config.Interval)
 		_ = b.HandleError(err)
 		return false
 	}
@@ -305,7 +305,7 @@ func (b *BaseCollector) run(getResources resourceGetter, dim metricDimensions) *
 	return &proc
 }
 
-// Run starts the base collector
+// Run starts the base collector.
 func (b *BaseCollector) Run() *CollectorProc {
 	return b.run(nil, defaultMetricDimension(b.dimension, b.resourcePrefix))
 }

@@ -19,7 +19,7 @@ import (
 const MaxMetricDataQueryItems = 500
 
 // Client implements the set of AWS service methods used in the collectors. We
-// use a small subset of what the AWS SDK provides accross a multitude of
+// use a small subset of what the AWS SDK provides across a multitude of
 // service packages, this interface helps us to easily keep track of that usage
 // and implement testing clients.
 type Client interface {
@@ -137,7 +137,7 @@ func (client *AWSClient) GetMetricData(in []*cloudwatch.GetMetricDataInput, tele
 	wg := sync.WaitGroup{}
 	for _, input := range in {
 		wg.Add(1)
-		go func(w *sync.WaitGroup, ip *cloudwatch.GetMetricDataInput) {
+		go func(ip *cloudwatch.GetMetricDataInput) {
 			defer wg.Done()
 			err := client.getCloudwatch().GetMetricDataPages(ip, func(page *cloudwatch.GetMetricDataOutput, last bool) bool {
 				defer tele.GetMetricDataCount.Inc()
@@ -151,7 +151,7 @@ func (client *AWSClient) GetMetricData(in []*cloudwatch.GetMetricDataInput, tele
 				Logger.Error("GetMetricData:", err.Error())
 				tele.ErrorCount.Inc()
 			}
-		}(&wg, input)
+		}(input)
 	}
 	wg.Wait()
 

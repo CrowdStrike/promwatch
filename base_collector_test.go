@@ -413,7 +413,7 @@ func TestGetMetricDataInput(t *testing.T) {
 	}
 }
 
-// stripInterface is used for easier access to internal data during testing
+// stripInterface is used for easier access to internal data during testing.
 func stripInterface(i MetricCollector, e error) *BaseCollector {
 	if c, ok := i.(*BaseCollector); ok {
 		return c

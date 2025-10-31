@@ -28,7 +28,7 @@ var Logger *zap.SugaredLogger
 // Level is the log level used to configure the global Logger.
 var Level = zap.NewAtomicLevel()
 
-// init is used to configure and instanciate the Logger to ensure logging is
+// init is used to configure and instantiate the Logger to ensure logging is
 // available early.
 func init() {
 	logger := zap.New(zapcore.NewCore(

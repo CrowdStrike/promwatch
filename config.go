@@ -60,7 +60,7 @@ type CollectorConfig struct {
 }
 
 // UnmarshalYAML implements the Unmarshaller interface for PromWatchConfig to
-// unmarshal the different collectors while still maintaing the interface type
+// unmarshal the different collectors while still maintaining the interface type
 // for the list of collectors.
 func (c *PromWatchConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type tmp struct {
